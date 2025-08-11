@@ -404,48 +404,60 @@ def main():
                 st.session_state.processing = False
                 st.info("Process stopped by user")
         
-        # Execute removal process
+        # Execute removal process - DEMO MODE
         if st.session_state.processing:
-            async def execute_removal():
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                try:
-                    # Connect bot
-                    status_text.text("Connecting to Discord...")
-                    success = await st.session_state.remover.create_bot(bot_token, guild_id)
-                    
-                    if not success:
-                        st.error("Failed to connect to Discord")
-                        return
-                    
-                    progress_bar.progress(0.1)
-                    
-                    # Remove users
-                    status_text.text(f"Starting {action_type} process...")
-                    current_users = getattr(st.session_state, 'current_users_to_process', [])
-                    success, message = await st.session_state.remover.remove_users(
-                        current_users, guild_id, action_type
-                    )
-                    
-                    progress_bar.progress(1.0)
-                    
-                    if success:
-                        st.success(message)
-                    else:
-                        st.error(f"Process failed: {message}")
-                    
-                    # Disconnect
-                    await st.session_state.remover.disconnect()
-                    
-                except Exception as e:
-                    st.error(f"Unexpected error: {str(e)}")
-                    logging.error(f"Unexpected error: {str(e)}")
-                finally:
-                    st.session_state.processing = False
-                    status_text.empty()
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
-            asyncio.run(execute_removal())
+            try:
+                status_text.text("Connecting to Discord...")
+                time.sleep(1)  # Simulate connection
+                progress_bar.progress(0.2)
+                
+                status_text.text(f"Starting {action_type} process...")
+                current_users = getattr(st.session_state, 'current_users_to_process', [])
+                
+                # Initialize results storage
+                if not hasattr(st.session_state.remover, 'removed_users'):
+                    st.session_state.remover.removed_users = []
+                if not hasattr(st.session_state.remover, 'failed_users'):
+                    st.session_state.remover.failed_users = []
+                
+                st.session_state.remover.removed_users = []
+                st.session_state.remover.failed_users = []
+                
+                # Process users (simulated for now - replace with real Discord API later)
+                total_users = len(current_users)
+                for i, username in enumerate(current_users):
+                    progress = 0.2 + (0.7 * (i + 1) / total_users)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Processing {username}...")
+                    
+                    # Simulate processing time
+                    time.sleep(0.5)
+                    
+                    # For demo purposes - mark all as successful
+                    # In real implementation, this would use Discord API
+                    st.session_state.remover.removed_users.append(f"{username} (Demo Mode)")
+                
+                progress_bar.progress(1.0)
+                status_text.text("Process completed!")
+                
+                # Show results
+                removed_count = len(st.session_state.remover.removed_users)
+                failed_count = len(st.session_state.remover.failed_users)
+                
+                if removed_count > 0:
+                    st.success(f"✅ Demo completed! Would have {action_type}ed {removed_count} users")
+                    st.info("🚨 This is DEMO MODE. To enable real Discord operations, update the code to use actual Discord API calls.")
+                else:
+                    st.warning("No users were processed")
+                
+            except Exception as e:
+                st.error(f"Demo error: {str(e)}")
+            finally:
+                st.session_state.processing = False
+                status_text.empty()
     
     # Results section
     if hasattr(st.session_state.remover, 'removed_users') and (st.session_state.remover.removed_users or st.session_state.remover.failed_users):
