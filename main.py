@@ -362,10 +362,27 @@ def main():
         
         if total_users > 0:
             st.metric("Total Users to Process", total_users)
+        
+        # Results metrics
+        if hasattr(st.session_state.remover, 'removed_users') and hasattr(st.session_state.remover, 'failed_users'):
+            removed_count = len(st.session_state.remover.removed_users)
+            failed_count = len(st.session_state.remover.failed_users)
             
-        if hasattr(st.session_state.remover, 'removed_users'):
-            st.metric("Successfully Removed", len(st.session_state.remover.removed_users))
-            st.metric("Failed Attempts", len(st.session_state.remover.failed_users))
+            if removed_count > 0 or failed_count > 0:
+                st.divider()
+                st.subheader("📊 Results")
+                
+                if removed_count > 0:
+                    st.metric("✅ Successfully Removed", removed_count, delta=f"+{removed_count}")
+                    
+                if failed_count > 0:
+                    st.metric("❌ Failed Attempts", failed_count, delta=f"+{failed_count}")
+                
+                # Success rate
+                total_processed = removed_count + failed_count
+                if total_processed > 0:
+                    success_rate = (removed_count / total_processed) * 100
+                    st.metric("📈 Success Rate", f"{success_rate:.1f}%")
     
     # Determine if we have users to process
     has_users_to_process = False
@@ -559,6 +576,10 @@ def main():
                 
                 if removed_count == 0 and failed_count == 0:
                     st.info("No users were processed")
+                
+                # Force refresh to update statistics
+                time.sleep(1)
+                st.rerun()
                 
             except Exception as e:
                 st.error(f"Unexpected error: {str(e)}")
