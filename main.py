@@ -62,7 +62,7 @@ class DiscordUserRemover:
             return False
     
     async def get_users_without_roles(self, guild_id):
-        """Get list of users without any roles (except @everyone)"""
+        """Get list of users without any roles (except @everyone) - WITH SAFETY CHECKS"""
         if not self.bot or not self.is_connected:
             return []
         
@@ -72,11 +72,29 @@ class DiscordUserRemover:
                 return []
             
             users_without_roles = []
+            excluded_count = 0
+            
             for member in guild.members:
+                # SAFETY CHECK: Skip bots (including this bot)
+                if member.bot:
+                    excluded_count += 1
+                    continue
+                
+                # SAFETY CHECK: Skip server owner
+                if member.id == guild.owner_id:
+                    excluded_count += 1
+                    continue
+                
+                # SAFETY CHECK: Skip users with administrator permission
+                if member.guild_permissions.administrator:
+                    excluded_count += 1
+                    continue
+                
                 # Check if user has any roles other than @everyone
                 if len(member.roles) <= 1:  # @everyone is always present
                     users_without_roles.append(member.name)
             
+            logging.info(f"Found {len(users_without_roles)} users without roles, excluded {excluded_count} protected users")
             return users_without_roles
             
         except Exception as e:
@@ -301,6 +319,13 @@ def main():
         if filter_option in ["Users Without Roles", "Both (Excel + No Roles)"]:
             st.header("👤 Users Without Roles")
             
+            # Safety warning
+            st.warning("🛡️ **SAFETY FEATURES ENABLED:**\n"
+                      "• Bots will be automatically excluded\n"
+                      "• Server owner will be protected\n"
+                      "• Administrators will be protected\n"
+                      "• Only regular members without roles will be found")
+            
             if st.button("🔍 Find Users Without Roles"):
                 with st.spinner("Scanning server for users without roles..."):
                     async def get_no_role_users():
@@ -480,7 +505,22 @@ def main():
                                                 break
                                         
                                         if member:
-                                            # Don't remove bot itself
+                                            # SAFETY CHECK: Don't remove bots
+                                            if member.bot:
+                                                results["failed"].append(f"{username} (Cannot remove bots)")
+                                                continue
+                                            
+                                            # SAFETY CHECK: Don't remove server owner
+                                            if member.id == guild.owner_id:
+                                                results["failed"].append(f"{username} (Cannot remove server owner)")
+                                                continue
+                                            
+                                            # SAFETY CHECK: Don't remove administrators
+                                            if member.guild_permissions.administrator:
+                                                results["failed"].append(f"{username} (Cannot remove administrators)")
+                                                continue
+                                            
+                                            # SAFETY CHECK: Don't remove this bot
                                             if member.id == client.user.id:
                                                 results["failed"].append(f"{username} (Cannot remove bot)")
                                                 continue
