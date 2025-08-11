@@ -404,18 +404,18 @@ def main():
                 st.session_state.processing = False
                 st.info("Process stopped by user")
         
-        # Execute removal process - DEMO MODE
+        # Execute removal process - REAL DISCORD API
         if st.session_state.processing:
             progress_bar = st.progress(0)
             status_text = st.empty()
             
             try:
                 status_text.text("Connecting to Discord...")
-                time.sleep(1)  # Simulate connection
-                progress_bar.progress(0.2)
                 
-                status_text.text(f"Starting {action_type} process...")
-                current_users = getattr(st.session_state, 'current_users_to_process', [])
+                import discord
+                import asyncio
+                import threading
+                from concurrent.futures import ThreadPoolExecutor
                 
                 # Initialize results storage
                 if not hasattr(st.session_state.remover, 'removed_users'):
@@ -426,35 +426,142 @@ def main():
                 st.session_state.remover.removed_users = []
                 st.session_state.remover.failed_users = []
                 
-                # Process users (simulated for now - replace with real Discord API later)
+                current_users = getattr(st.session_state, 'current_users_to_process', [])
                 total_users = len(current_users)
-                for i, username in enumerate(current_users):
-                    progress = 0.2 + (0.7 * (i + 1) / total_users)
-                    progress_bar.progress(progress)
-                    status_text.text(f"Processing {username}...")
+                
+                # Create results containers
+                results = {"removed": [], "failed": [], "completed": False}
+                
+                async def discord_bot_operations():
+                    try:
+                        # Setup Discord bot
+                        intents = discord.Intents.default()
+                        intents.members = True
+                        intents.guilds = True
+                        
+                        client = discord.Client(intents=intents)
+                        
+                        @client.event
+                        async def on_ready():
+                            try:
+                                # Get guild
+                                guild = client.get_guild(int(guild_id))
+                                if not guild:
+                                    results["failed"].append("Server not found")
+                                    await client.close()
+                                    return
+                                
+                                # Process each user
+                                for i, username in enumerate(current_users):
+                                    try:
+                                        # Find member by username
+                                        member = None
+                                        for m in guild.members:
+                                            if (m.name.lower() == username.lower() or 
+                                                m.display_name.lower() == username.lower()):
+                                                member = m
+                                                break
+                                        
+                                        if member:
+                                            # Don't remove bot itself
+                                            if member.id == client.user.id:
+                                                results["failed"].append(f"{username} (Cannot remove bot)")
+                                                continue
+                                            
+                                            # Perform action
+                                            if action_type == "kick":
+                                                await member.kick(reason="Bulk removal via bot")
+                                                results["removed"].append(f"{member.name}#{member.discriminator}")
+                                            elif action_type == "ban":
+                                                await member.ban(reason="Bulk removal via bot", delete_message_days=0)
+                                                results["removed"].append(f"{member.name}#{member.discriminator}")
+                                                
+                                        else:
+                                            results["failed"].append(f"{username} (User not found)")
+                                        
+                                        # Small delay to respect rate limits
+                                        await asyncio.sleep(1)
+                                        
+                                    except discord.Forbidden:
+                                        results["failed"].append(f"{username} (No permission)")
+                                    except discord.HTTPException as e:
+                                        results["failed"].append(f"{username} (Discord error: {str(e)})")
+                                    except Exception as e:
+                                        results["failed"].append(f"{username} (Error: {str(e)})")
+                                
+                                results["completed"] = True
+                                
+                            except Exception as e:
+                                results["failed"].append(f"Bot error: {str(e)}")
+                            finally:
+                                await client.close()
+                        
+                        # Start bot
+                        await client.start(bot_token)
+                        
+                    except Exception as e:
+                        results["failed"].append(f"Connection error: {str(e)}")
+                        results["completed"] = True
+                
+                # Run Discord operations in thread
+                def run_discord_ops():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(discord_bot_operations())
+                    except Exception as e:
+                        results["failed"].append(f"Thread error: {str(e)}")
+                        results["completed"] = True
+                    finally:
+                        loop.close()
+                
+                # Start Discord bot in separate thread
+                bot_thread = threading.Thread(target=run_discord_ops)
+                bot_thread.daemon = True
+                bot_thread.start()
+                
+                # Wait and show progress
+                progress_bar.progress(0.1)
+                status_text.text(f"Starting {action_type} process...")
+                
+                # Monitor progress
+                timeout = 300  # 5 minutes timeout
+                start_time = time.time()
+                
+                while not results["completed"] and (time.time() - start_time) < timeout:
+                    # Update progress based on results
+                    processed = len(results["removed"]) + len(results["failed"])
+                    if total_users > 0:
+                        progress = 0.1 + (0.8 * processed / total_users)
+                        progress_bar.progress(min(progress, 0.9))
                     
-                    # Simulate processing time
-                    time.sleep(0.5)
+                    if processed > 0:
+                        status_text.text(f"Processed {processed}/{total_users} users...")
                     
-                    # For demo purposes - mark all as successful
-                    # In real implementation, this would use Discord API
-                    st.session_state.remover.removed_users.append(f"{username} (Demo Mode)")
+                    time.sleep(2)
+                
+                # Final results
+                st.session_state.remover.removed_users = results["removed"]
+                st.session_state.remover.failed_users = results["failed"]
                 
                 progress_bar.progress(1.0)
                 status_text.text("Process completed!")
                 
-                # Show results
-                removed_count = len(st.session_state.remover.removed_users)
-                failed_count = len(st.session_state.remover.failed_users)
+                # Show final results
+                removed_count = len(results["removed"])
+                failed_count = len(results["failed"])
                 
                 if removed_count > 0:
-                    st.success(f"✅ Demo completed! Would have {action_type}ed {removed_count} users")
-                    st.info("🚨 This is DEMO MODE. To enable real Discord operations, update the code to use actual Discord API calls.")
-                else:
-                    st.warning("No users were processed")
+                    st.success(f"✅ Successfully {action_type}ed {removed_count} users from Discord!")
+                
+                if failed_count > 0:
+                    st.warning(f"⚠️ Failed to process {failed_count} users")
+                
+                if removed_count == 0 and failed_count == 0:
+                    st.info("No users were processed")
                 
             except Exception as e:
-                st.error(f"Demo error: {str(e)}")
+                st.error(f"Unexpected error: {str(e)}")
             finally:
                 st.session_state.processing = False
                 status_text.empty()
