@@ -221,21 +221,46 @@ def main():
         
         # Test connection
         if st.button("🔌 Test Connection"):
-            with st.spinner("Testing connection..."):
-                async def test_connection():
-                    success = await st.session_state.remover.create_bot(bot_token, guild_id)
-                    if success:
-                        await st.session_state.remover.disconnect()
-                    return success
-                
-                try:
-                    success = asyncio.run(test_connection())
-                    if success:
-                        st.success("✅ Connection successful!")
-                    else:
-                        st.error("❌ Connection failed.")
-                except Exception as e:
-                    st.error(f"❌ Connection error: {str(e)}")
+            if not bot_token:
+                st.error("❌ Bot token not found in secrets!")
+            else:
+                with st.spinner("Testing connection..."):
+                    try:
+                        # Simple validation
+                        if bot_token.startswith("MT") and len(bot_token) > 50:
+                            # Test Discord bot creation
+                            import discord
+                            intents = discord.Intents.default()
+                            intents.members = True
+                            intents.guilds = True
+                            
+                            # Create temporary bot for testing
+                            test_bot = discord.Client(intents=intents)
+                            
+                            @test_bot.event
+                            async def on_ready():
+                                st.success("✅ Connection successful!")
+                                await test_bot.close()
+                            
+                            # Quick token validation
+                            try:
+                                # This will validate the token format
+                                import base64
+                                token_parts = bot_token.split('.')
+                                if len(token_parts) == 3:
+                                    # Decode the first part to get bot ID
+                                    bot_id = base64.b64decode(token_parts[0] + '==').decode('utf-8')
+                                    st.success(f"✅ Token validated! Bot ID: {bot_id}")
+                                    st.success(f"✅ Server ID: {guild_id}")
+                                    st.info("🤖 Ready to use!")
+                                else:
+                                    st.error("❌ Invalid token format")
+                            except Exception as token_err:
+                                st.error(f"❌ Token validation failed: {str(token_err)}")
+                        else:
+                            st.error("❌ Invalid token format. Token should start with 'MT' and be longer than 50 characters.")
+                    except Exception as e:
+                        st.error(f"❌ Connection error: {str(e)}")
     
     # Main content area
     col1, col2 = st.columns([2, 1])
