@@ -1,0 +1,14 @@
+# Discord Bot Configuration Template
+# Copy this content to a new file named ".env" and fill in your actual values
+
+# Discord Bot Token (Get from Discord Developer Portal)
+DISCORD_BOT_TOKEN=your_discord_bot_token_here
+
+# Discord Server ID (Right-click server name and copy ID with Developer Mode enabled)
+DISCORD_GUILD_ID=your_discord_server_id_here
+
+# Instructions:
+# 1. Create a file named ".env" in the same directory as main.py
+# 2. Copy the lines above (without the # comments) into the .env file
+# 3. Replace the placeholder values with your actual Discord bot token and server ID
+# 4. Save the file and run: streamlit run main.py 
