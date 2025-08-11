@@ -328,19 +328,91 @@ def main():
             
             if st.button("🔍 Find Users Without Roles"):
                 with st.spinner("Scanning server for users without roles..."):
-                    async def get_no_role_users():
-                        success = await st.session_state.remover.create_bot(bot_token, guild_id)
-                        if success:
-                            users = await st.session_state.remover.get_users_without_roles(guild_id)
-                            await st.session_state.remover.disconnect()
-                            return users
-                        return []
-                    
                     try:
-                        no_role_users = asyncio.run(get_no_role_users())
+                        import asyncio
+                        import discord
+                        
+                        # Simplified approach without complex async operations
+                        def find_no_role_users():
+                            try:
+                                # Create Discord client
+                                intents = discord.Intents.default()
+                                intents.members = True
+                                intents.guilds = True
+                                
+                                client = discord.Client(intents=intents)
+                                found_users = []
+                                
+                                @client.event
+                                async def on_ready():
+                                    try:
+                                        guild = client.get_guild(int(guild_id))
+                                        if guild:
+                                            excluded_count = 0
+                                            for member in guild.members:
+                                                # SAFETY CHECKS
+                                                if member.bot:
+                                                    excluded_count += 1
+                                                    continue
+                                                if member.id == guild.owner_id:
+                                                    excluded_count += 1
+                                                    continue
+                                                if member.guild_permissions.administrator:
+                                                    excluded_count += 1
+                                                    continue
+                                                
+                                                # Check if user has only @everyone role
+                                                if len(member.roles) <= 1:
+                                                    found_users.append(member.name)
+                                            
+                                            logging.info(f"Found {len(found_users)} users without roles, excluded {excluded_count} protected users")
+                                        
+                                    except Exception as e:
+                                        logging.error(f"Error in on_ready: {str(e)}")
+                                    finally:
+                                        await client.close()
+                                
+                                # Run bot briefly to get data
+                                try:
+                                    import threading
+                                    import time
+                                    
+                                    def run_bot():
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        try:
+                                            loop.run_until_complete(client.start(bot_token))
+                                        except Exception as e:
+                                            logging.error(f"Bot error: {str(e)}")
+                                        finally:
+                                            loop.close()
+                                    
+                                    bot_thread = threading.Thread(target=run_bot)
+                                    bot_thread.daemon = True
+                                    bot_thread.start()
+                                    
+                                    # Wait for results
+                                    timeout = 10
+                                    while len(found_users) == 0 and timeout > 0:
+                                        time.sleep(1)
+                                        timeout -= 1
+                                    
+                                    return found_users
+                                    
+                                except Exception as e:
+                                    logging.error(f"Threading error: {str(e)}")
+                                    return []
+                                    
+                            except Exception as e:
+                                logging.error(f"Discord client error: {str(e)}")
+                                return []
+                        
+                        # Execute the function
+                        no_role_users = find_no_role_users()
+                        
                         if no_role_users:
                             st.session_state.no_role_users = no_role_users
-                            st.success(f"Found {len(no_role_users)} users without roles")
+                            st.success(f"✅ Found {len(no_role_users)} users without roles")
                             
                             # Preview users without roles
                             st.subheader("👥 Users Without Roles Preview")
@@ -350,10 +422,11 @@ def main():
                             if len(no_role_users) > 10:
                                 st.info(f"Showing first 10 users. Total: {len(no_role_users)}")
                         else:
-                            st.info("No users without roles found")
+                            st.info("ℹ️ No users without roles found (or all users are protected)")
                             st.session_state.no_role_users = []
+                            
                     except Exception as e:
-                        st.error(f"Error finding users: {str(e)}")
+                        st.error(f"❌ Error finding users: {str(e)}")
                         st.session_state.no_role_users = []
             
             # Initialize if not exists
